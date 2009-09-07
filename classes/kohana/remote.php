@@ -67,6 +67,64 @@ class Kohana_Remote {
 		return $response;
 	}
 
+	// Extending Remote to have response method that processes the response if CURLOPT_HEADER = true
+	// code rip-off from http://github.com/shuber/curl/raw/6a53322aa47f39dbdc9eae06d1026954c371b53b/curl.php
+	
+	/**
+	 * Returns the overall output of a remote URL
+	 * 
+	 * @throws  Kohana_Exception
+	 * @param   string   remote URL
+	 * @param   array    curl options
+	 * @return  array    body, header
+	 */
+	
+	public static function get_all($url,array $options = NULL)
+	{
+		$options[CURLOPT_HEADER] = TRUE;
+		$response = Remote::get($url, $options);
+		return Remote::response($response);
+	}
+
+	/**
+	 * Returns the header and body portion of the output of a remote URL
+	 * 
+	 * @param   string   output of a remote URL
+	 */
+
+	public static function response($response) 
+	{
+		$body = '';
+		$head = array();
+		
+		# Extract headers from response
+		$pattern = '#HTTP/\d\.\d.*?$.*?\r\n\r\n#ims';
+		preg_match_all($pattern, $response, $matches);
+		$headers = preg_split("/\r\n/", str_replace("\r\n\r\n", '', array_pop($matches[0])));
+		
+		# Extract the version and status from the first header
+		$version_and_status = array_shift($headers);
+		preg_match('#HTTP/(\d\.\d)\s(\d\d\d)\s(.*)#', $version_and_status, $matches);
+		$head['Http-Version'] = $matches[1];
+		$head['Status-Code'] = $matches[2];
+		$head['Status'] = $matches[2].' '.$matches[3];
+		
+		# Convert headers into an associative array
+		foreach ($headers as $header) {
+			preg_match('#(.*?)\:\s(.*)#', $header, $matches);
+			$head[$matches[1]] = $matches[2];
+		}
+		
+		# Remove the headers from the response body
+		$body = preg_replace($pattern, '', $response);
+		
+		$r = array();
+		$r['body'] = $body;
+		$r['headers'] = $head;
+		
+		return $r;
+	}
+
 	/**
 	 * Returns the status code for a URL.
 	 *
